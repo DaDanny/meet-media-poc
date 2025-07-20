@@ -1,0 +1,79 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: meet-transcription-poc
+  annotations:
+    run.googleapis.com/ingress: all
+    run.googleapis.com/execution-environment: gen2
+spec:
+  template:
+    metadata:
+      annotations:
+        # Scale settings
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+        
+        # Resource allocation
+        run.googleapis.com/cpu: "1"
+        run.googleapis.com/memory: "2Gi"
+        
+        # Request timeout (for transcription processing)
+        run.googleapis.com/timeout: "900"
+        
+        # Execution environment
+        run.googleapis.com/execution-environment: gen2
+        
+        # VPC connector (if needed for internal resources)
+        # run.googleapis.com/vpc-access-connector: projects/PROJECT_ID/locations/REGION/connectors/CONNECTOR_NAME
+        
+    spec:
+      containerConcurrency: 10
+      containers:
+      - name: meet-transcription
+        image: gcr.io/PROJECT_ID/meet-transcription-poc:latest
+        ports:
+        - name: http1
+          containerPort: 8080
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "8080"
+        - name: GOOGLE_CLOUD_PROJECT_ID
+          value: "PROJECT_ID"
+        - name: MEET_OAUTH_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: meet-oauth-credentials
+              key: client_id
+        - name: MEET_OAUTH_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: meet-oauth-credentials
+              key: client_secret
+        - name: SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: session-secret
+              key: value
+        resources:
+          limits:
+            cpu: "1"
+            memory: "2Gi"
+          requests:
+            cpu: "0.5"
+            memory: "1Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5 

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Meet Transcription POC</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="header-content">
+                <h1 class="app-title">
+                    <i class="fas fa-microphone"></i>
+                    Meet Transcription POC
+                </h1>
+                <div class="connection-status">
+                    <span id="connection-indicator" class="status-indicator disconnected">
+                        <i class="fas fa-circle"></i>
+                        Disconnected
+                    </span>
+                </div>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="panel connection-panel">
+                <h2 class="panel-title">
+                    <i class="fas fa-link"></i>
+                    Connect to Meeting
+                </h2>
+                <form id="connection-form" class="connection-form">
+                    <div class="form-group">
+                        <label for="meeting-id">Meeting Space ID</label>
+                        <input type="text" id="meeting-id" placeholder="spaces/abc123def456" required>
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" id="auth-btn" class="btn btn-secondary">
+                            <i class="fab fa-google"></i>
+                            Authenticate with Google
+                        </button>
+                        <button type="submit" id="connect-btn" class="btn btn-primary" disabled>
+                            <i class="fas fa-plug"></i>
+                            Connect to Meeting
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="panel participants-panel">
+                <h2 class="panel-title">
+                    <i class="fas fa-users"></i>
+                    Participants (<span id="participant-count">0</span>)
+                </h2>
+                <div id="participants-list" class="participants-list">
+                    <div class="empty-state">
+                        <i class="fas fa-user-slash"></i>
+                        <p>No participants connected</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel transcript-panel">
+                <h2 class="panel-title">
+                    <i class="fas fa-closed-captioning"></i>
+                    Live Transcript
+                    <div class="transcript-controls">
+                        <button id="clear-transcript" class="btn btn-small">
+                            <i class="fas fa-eraser"></i>
+                            Clear
+                        </button>
+                        <button id="download-transcript" class="btn btn-small">
+                            <i class="fas fa-download"></i>
+                            Download
+                        </button>
+                    </div>
+                </h2>
+                <div id="transcript-container" class="transcript-container">
+                    <div class="empty-state">
+                        <i class="fas fa-microphone-slash"></i>
+                        <p>Waiting for audio streams...</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="status-bar">
+            <div class="status-item">
+                <i class="fas fa-clock"></i>
+                <span id="session-duration">00:00:00</span>
+            </div>
+            <div class="status-item">
+                <i class="fas fa-comment-dots"></i>
+                <span id="transcript-count">0 lines</span>
+            </div>
+            <div class="status-item">
+                <i class="fas fa-signal"></i>
+                <span id="audio-quality">No audio</span>
+            </div>
+        </footer>
+    </div>
+
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <p id="loading-message">Connecting to meeting...</p>
+        </div>
+    </div>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <script src="scripts/app.js"></script>
+</body>
+</html>

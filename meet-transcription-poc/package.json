@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "start": "node dist/server.js",
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev": "ts-node-dev --respawn --transpile-only backend/server.ts",
     "build": "npm run build:server && npm run build:web",
     "build:server": "tsc",
     "build:web": "webpack --mode production",
@@ -43,7 +43,6 @@
     "webpack-cli": "^5.1.4",
     "ts-loader": "^9.5.1",
     "html-webpack-plugin": "^5.6.0",
-    "@webpack-dev-server/client": "^4.15.2",
     "webpack-dev-server": "^4.15.2",
     "jest": "^29.7.0",
     "@types/jest": "^29.5.12"

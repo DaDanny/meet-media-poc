@@ -8,7 +8,7 @@ import {
   TranscriptionServiceError,
   AudioStreamInfo
 } from '../types';
-import { MeetStreamTrack, MediaStreamAudioTrack, AudioData } from '../../meet-transcription-poc/src/meet-client/types';
+import { MeetStreamTrack, MediaStreamAudioTrack, AudioData } from '../meet-client/types';
 
 export interface TranscriptionResult {
   transcript: string;
