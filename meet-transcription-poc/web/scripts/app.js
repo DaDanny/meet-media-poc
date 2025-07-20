@@ -1,356 +1,635 @@
-class MeetTranscriptionApp {
+// Meet Transcription Dashboard JavaScript
+
+class TranscriptionDashboard {
     constructor() {
-        this.ws = null;
+        this.socket = null;
+        this.sessionId = null;
         this.isConnected = false;
-        this.participants = new Map();
-        this.transcriptLines = [];
-        this.sessionStartTime = null;
-        this.durationTimer = null;
+        this.startTime = null;
+        this.durationInterval = null;
+        this.transcriptCount = 0;
         
-        this.initializeElements();
-        this.bindEvents();
-        this.updateConnectionStatus(false);
+        // 🔧 NEW: AI Bot state
+        this.aiBot = {
+            enabled: false,
+            responding: false,
+            voiceCommands: ['hey ai', 'ai bot', 'ai summary', 'ai action items']
+        };
+        
+        this.init();
     }
-    
-    initializeElements() {
-        // Connection elements
-        this.authBtn = document.getElementById('auth-btn');
-        this.connectBtn = document.getElementById('connect-btn');
-        this.connectionForm = document.getElementById('connection-form');
-        this.meetingIdInput = document.getElementById('meeting-id');
-        
-        // Status elements
-        this.connectionIndicator = document.getElementById('connection-indicator');
-        this.participantCount = document.getElementById('participant-count');
-        this.sessionDuration = document.getElementById('session-duration');
-        this.transcriptCount = document.getElementById('transcript-count');
-        this.audioQuality = document.getElementById('audio-quality');
-        
-        // Content elements
-        this.participantsList = document.getElementById('participants-list');
-        this.transcriptContainer = document.getElementById('transcript-container');
-        
-        // Control elements
-        this.clearTranscriptBtn = document.getElementById('clear-transcript');
-        this.downloadTranscriptBtn = document.getElementById('download-transcript');
-        
-        // Overlay elements
-        this.loadingOverlay = document.getElementById('loading-overlay');
-        this.loadingMessage = document.getElementById('loading-message');
-        this.toastContainer = document.getElementById('toast-container');
+
+    init() {
+        this.setupWebSocket();
+        this.setupEventListeners();
+        this.updateConnectionStatus('connecting');
     }
-    
-    bindEvents() {
-        this.authBtn.addEventListener('click', () => this.handleAuth());
-        this.connectionForm.addEventListener('submit', (e) => this.handleConnect(e));
-        this.clearTranscriptBtn.addEventListener('click', () => this.clearTranscript());
-        this.downloadTranscriptBtn.addEventListener('click', () => this.downloadTranscript());
+
+    setupWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsPort = 3001; // WebSocket port
+        this.socket = new WebSocket(`${protocol}//${window.location.hostname}:${wsPort}`);
+
+        this.socket.onopen = () => {
+            console.log('WebSocket connected');
+            this.isConnected = true;
+            this.updateConnectionStatus('connected');
+        };
+
+        this.socket.onmessage = (event) => {
+            const message = JSON.parse(event.data);
+            this.handleWebSocketMessage(message);
+        };
+
+        this.socket.onclose = () => {
+            console.log('WebSocket disconnected');
+            this.isConnected = false;
+            this.updateConnectionStatus('disconnected');
+            
+            // Attempt to reconnect after 3 seconds
+            setTimeout(() => this.setupWebSocket(), 3000);
+        };
+
+        this.socket.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            this.showError('WebSocket connection failed');
+        };
+    }
+
+    setupEventListeners() {
+        // Session control buttons
+        document.getElementById('startBtn').onclick = () => this.startTranscription();
+        document.getElementById('stopBtn').onclick = () => this.stopTranscription();
+        document.getElementById('exportBtn').onclick = () => this.exportTranscript();
         
-        // Handle browser close/refresh
-        window.addEventListener('beforeunload', () => {
-            if (this.ws) {
-                this.ws.close();
+        // 🔧 NEW: AI Bot controls
+        document.getElementById('aiToggle').onchange = (e) => this.toggleAIBot(e.target.checked);
+        
+        // Manual question input
+        const questionInput = document.getElementById('questionInput');
+        questionInput.onkeypress = (e) => {
+            if (e.key === 'Enter') {
+                this.askManualQuestion();
             }
-        });
+        };
     }
-    
-    async handleAuth() {
-        try {
-            this.showLoading('Authenticating with Google...');
-            
-            const response = await fetch('/auth/url');
-            const data = await response.json();
-            
-            if (data.authUrl) {
-                window.open(data.authUrl, 'auth', 'width=500,height=600');
-                
-                // Listen for auth completion
-                const checkAuth = setInterval(async () => {
-                    const authCheck = await fetch('/auth/status');
-                    const authData = await authCheck.json();
-                    
-                    if (authData.authenticated) {
-                        clearInterval(checkAuth);
-                        this.hideLoading();
-                        this.connectBtn.disabled = false;
-                        this.showToast('Authentication successful!', 'success');
-                    }
-                }, 1000);
-                
-                // Timeout after 2 minutes
-                setTimeout(() => {
-                    clearInterval(checkAuth);
-                    this.hideLoading();
-                    this.showToast('Authentication timeout', 'error');
-                }, 120000);
-            }
-        } catch (error) {
-            console.error('Auth error:', error);
-            this.hideLoading();
-            this.showToast('Authentication failed', 'error');
-        }
-    }
-    
-    async handleConnect(e) {
-        e.preventDefault();
-        
-        const meetingId = this.meetingIdInput.value.trim();
-        if (!meetingId) {
-            this.showToast('Please enter a meeting ID', 'warning');
-            return;
-        }
-        
-        try {
-            this.showLoading('Connecting to meeting...');
-            
-            // Initialize WebSocket connection
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
-            
-            this.ws = new WebSocket(wsUrl);
-            
-            this.ws.onopen = () => {
-                console.log('WebSocket connected');
-                
-                // Send connection request
-                this.ws.send(JSON.stringify({
-                    type: 'connect',
-                    meetingId: meetingId
-                }));
-            };
-            
-            this.ws.onmessage = (event) => {
-                this.handleWebSocketMessage(JSON.parse(event.data));
-            };
-            
-            this.ws.onclose = () => {
-                console.log('WebSocket disconnected');
-                this.updateConnectionStatus(false);
-                this.hideLoading();
-            };
-            
-            this.ws.onerror = (error) => {
-                console.error('WebSocket error:', error);
-                this.hideLoading();
-                this.showToast('Connection failed', 'error');
-            };
-            
-        } catch (error) {
-            console.error('Connection error:', error);
-            this.hideLoading();
-            this.showToast('Failed to connect to meeting', 'error');
-        }
-    }
-    
+
     handleWebSocketMessage(message) {
+        console.log('Received message:', message.type);
+
         switch (message.type) {
-            case 'connection_status':
-                this.handleConnectionStatus(message.payload);
+            case 'transcript':
+                this.handleTranscript(message.payload);
                 break;
+                
             case 'session_update':
                 this.handleSessionUpdate(message.payload);
                 break;
-            case 'transcript':
-                this.handleTranscriptLine(message.payload);
+                
+            case 'connection_status':
+                this.handleConnectionStatus(message.payload);
                 break;
+                
+            // 🔧 NEW: AI Bot message types
+            case 'ai_response':
+                this.handleAIResponse(message.payload);
+                break;
+                
+            case 'ai_summary':
+                this.handleAISummary(message.payload);
+                break;
+                
+            case 'voice_command_detected':
+                this.handleVoiceCommandDetected(message.payload);
+                break;
+                
             case 'error':
-                this.showToast(message.payload.message, 'error');
+                this.showError(message.payload.message);
                 break;
+                
+            default:
+                console.log('Unknown message type:', message.type);
         }
     }
-    
-    handleConnectionStatus(status) {
-        this.isConnected = status.status === 'connected';
-        this.updateConnectionStatus(this.isConnected);
+
+    handleTranscript(transcript) {
+        this.addTranscriptLine(transcript);
+        this.transcriptCount++;
         
-        if (this.isConnected) {
-            this.hideLoading();
-            this.sessionStartTime = new Date();
-            this.startDurationTimer();
-            this.showToast('Connected to meeting!', 'success');
+        // 🔧 NEW: Check for voice commands if AI bot is enabled
+        if (this.aiBot.enabled && transcript.isFinal) {
+            this.checkForVoiceCommands(transcript);
+        }
+    }
+
+    handleSessionUpdate(payload) {
+        this.updateParticipants(payload.participants);
+        
+        // Update session status if needed
+        if (payload.status === 'active' && !this.sessionId) {
+            this.sessionId = payload.sessionId || 'active-session';
+            this.showSessionInfo();
+        }
+    }
+
+    handleConnectionStatus(payload) {
+        this.updateConnectionStatus(payload.status);
+    }
+
+    // 🔧 NEW: AI Bot methods
+    toggleAIBot(enabled) {
+        this.aiBot.enabled = enabled;
+        
+        const aiStatus = document.getElementById('aiStatus');
+        const voiceCommands = document.getElementById('voiceCommands');
+        const manualQuestion = document.getElementById('manualQuestion');
+        const aiPanel = document.getElementById('aiPanel');
+        
+        if (enabled) {
+            aiStatus.textContent = 'Enabled';
+            aiStatus.classList.add('enabled');
+            voiceCommands.style.display = 'block';
+            manualQuestion.style.display = 'flex';
+            aiPanel.style.display = 'flex';
+            
+            this.addAIMessage('🤖 AI Assistant enabled! You can now use voice commands or ask questions manually.');
         } else {
-            this.stopDurationTimer();
-        }
-    }
-    
-    handleSessionUpdate(session) {
-        this.participants.clear();
-        session.participants.forEach(participant => {
-            this.participants.set(participant.id, participant);
-        });
-        
-        this.updateParticipantsList();
-        this.updateAudioQuality('Good'); // Mock for now
-    }
-    
-    handleTranscriptLine(line) {
-        this.transcriptLines.push(line);
-        this.addTranscriptLine(line);
-        this.updateTranscriptCount();
-    }
-    
-    addTranscriptLine(line) {
-        const transcriptLine = document.createElement('div');
-        transcriptLine.className = `transcript-line ${line.speaker.role}`;
-        if (!line.isFinal) {
-            transcriptLine.classList.add('interim');
+            aiStatus.textContent = 'Disabled';
+            aiStatus.classList.remove('enabled');
+            voiceCommands.style.display = 'none';
+            manualQuestion.style.display = 'none';
+            aiPanel.style.display = 'none';
         }
         
-        transcriptLine.innerHTML = `
-            <div class="transcript-speaker">
-                ${line.speaker.name}
-                <span class="transcript-timestamp">${new Date(line.timestamp).toLocaleTimeString()}</span>
-            </div>
-            <div class="transcript-text">${line.text}</div>
-        `;
-        
-        // Remove empty state if present
-        const emptyState = this.transcriptContainer.querySelector('.empty-state');
-        if (emptyState) {
-            emptyState.remove();
+        // Update AI settings on server
+        if (this.sessionId) {
+            this.updateAISettings(enabled);
         }
+    }
+
+    checkForVoiceCommands(transcript) {
+        const text = transcript.text.toLowerCase();
         
-        this.transcriptContainer.appendChild(transcriptLine);
-        this.transcriptContainer.scrollTop = this.transcriptContainer.scrollHeight;
+        // Check if transcript contains any voice commands
+        const containsCommand = this.aiBot.voiceCommands.some(cmd => text.includes(cmd));
+        
+        if (containsCommand && !this.aiBot.responding) {
+            this.handleVoiceCommand(transcript);
+        }
     }
-    
-    updateConnectionStatus(connected) {
-        this.connectionIndicator.className = `status-indicator ${connected ? 'connected' : 'disconnected'}`;
-        this.connectionIndicator.innerHTML = `
-            <i class="fas fa-circle"></i>
-            ${connected ? 'Connected' : 'Disconnected'}
-        `;
+
+    async handleVoiceCommand(transcript) {
+        const text = transcript.text.toLowerCase();
+        this.aiBot.responding = true;
+        
+        // Show command detected indicator
+        const commandDetected = document.getElementById('commandDetected');
+        commandDetected.style.display = 'block';
+        
+        try {
+            let question = transcript.text;
+            
+            // Extract question from command
+            if (text.includes('hey ai') || text.includes('ai bot')) {
+                // Remove the command prefix to get the actual question
+                question = transcript.text.replace(/hey ai|ai bot/gi, '').trim();
+                if (!question) {
+                    question = 'Can you help me with this meeting?';
+                }
+            } else if (text.includes('ai summary')) {
+                question = 'Please provide a summary of our discussion so far.';
+            } else if (text.includes('ai action items')) {
+                question = 'What are the action items from our discussion?';
+            }
+            
+            // Send question to AI bot
+            const response = await this.askAIQuestion(question, transcript.speaker.name);
+            
+            // Display the AI response
+            this.displayAIResponse({
+                question: question,
+                answer: response.answer,
+                askedBy: transcript.speaker.name,
+                triggerType: 'voice_command'
+            });
+            
+        } catch (error) {
+            console.error('Error processing voice command:', error);
+            this.addAIMessage('❌ Sorry, I had trouble processing that voice command.');
+        } finally {
+            this.aiBot.responding = false;
+            commandDetected.style.display = 'none';
+        }
     }
-    
-    updateParticipantsList() {
-        if (this.participants.size === 0) {
-            this.participantsList.innerHTML = `
-                <div class="empty-state">
-                    <i class="fas fa-user-slash"></i>
-                    <p>No participants connected</p>
-                </div>
-            `;
-            this.participantCount.textContent = '0';
+
+    async askManualQuestion() {
+        const questionInput = document.getElementById('questionInput');
+        const question = questionInput.value.trim();
+        
+        if (!question) {
             return;
         }
         
-        this.participantsList.innerHTML = '';
-        this.participants.forEach(participant => {
-            const participantElement = document.createElement('div');
-            participantElement.className = 'participant-item';
+        if (!this.sessionId) {
+            this.showError('Please start a transcription session first.');
+            return;
+        }
+        
+        try {
+            questionInput.disabled = true;
+            const response = await this.askAIQuestion(question, 'Dashboard User');
+            
+            this.displayAIResponse({
+                question: question,
+                answer: response.answer,
+                askedBy: 'Dashboard User',
+                triggerType: 'manual'
+            });
+            
+            questionInput.value = '';
+        } catch (error) {
+            console.error('Error asking manual question:', error);
+            this.showError('Failed to get AI response. Please try again.');
+        } finally {
+            questionInput.disabled = false;
+        }
+    }
+
+    async askAIQuestion(question, askedBy) {
+        const response = await fetch(`/api/ai/question/${this.sessionId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                question: question,
+                askedBy: askedBy
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to get AI response');
+        }
+        
+        return await response.json();
+    }
+
+    async updateAISettings(enabled) {
+        try {
+            await fetch(`/api/ai/settings/${this.sessionId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    enableQA: enabled,
+                    enableSummary: enabled,
+                    enableFileExport: true
+                })
+            });
+        } catch (error) {
+            console.error('Error updating AI settings:', error);
+        }
+    }
+
+    handleAIResponse(payload) {
+        this.displayAIResponse(payload);
+    }
+
+    handleAISummary(payload) {
+        this.addAIMessage(`📊 **Meeting Summary Update:**\n${payload.summary}`);
+    }
+
+    handleVoiceCommandDetected(payload) {
+        const commandDetected = document.getElementById('commandDetected');
+        commandDetected.style.display = 'block';
+        setTimeout(() => {
+            commandDetected.style.display = 'none';
+        }, 3000);
+    }
+
+    displayAIResponse(response) {
+        const aiResponses = document.getElementById('aiResponses');
+        
+        // Remove placeholder if it exists
+        const placeholder = aiResponses.querySelector('.placeholder');
+        if (placeholder) {
+            placeholder.remove();
+        }
+        
+        const responseDiv = document.createElement('div');
+        responseDiv.className = 'ai-response';
+        
+        const triggerIcon = response.triggerType === 'voice_command' ? '🎤' : '⌨️';
+        
+        responseDiv.innerHTML = `
+            <div class="ai-question">
+                ${triggerIcon} <strong>${response.askedBy}:</strong> ${response.question}
+            </div>
+            <div class="ai-answer">
+                🤖 ${response.answer}
+            </div>
+            <div class="ai-meta">
+                <span>Answered at ${new Date().toLocaleTimeString()}</span>
+                <span>${response.triggerType === 'voice_command' ? 'Voice Command' : 'Manual'}</span>
+            </div>
+        `;
+        
+        aiResponses.appendChild(responseDiv);
+        aiResponses.scrollTop = aiResponses.scrollHeight;
+    }
+
+    addAIMessage(message) {
+        const aiResponses = document.getElementById('aiResponses');
+        
+        // Remove placeholder if it exists
+        const placeholder = aiResponses.querySelector('.placeholder');
+        if (placeholder) {
+            placeholder.remove();
+        }
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'ai-response';
+        messageDiv.innerHTML = `
+            <div class="ai-answer">${message}</div>
+            <div class="ai-meta">
+                <span>${new Date().toLocaleTimeString()}</span>
+                <span>System</span>
+            </div>
+        `;
+        
+        aiResponses.appendChild(messageDiv);
+        aiResponses.scrollTop = aiResponses.scrollHeight;
+    }
+
+    // Session management methods
+    async startTranscription() {
+        try {
+            const meetingId = prompt('Enter Meeting Space ID:', 'spaces/example-meeting-id');
+            if (!meetingId) return;
+            
+            const startBtn = document.getElementById('startBtn');
+            const stopBtn = document.getElementById('stopBtn');
+            const exportBtn = document.getElementById('exportBtn');
+            
+            startBtn.disabled = true;
+            startBtn.textContent = '🔄 Starting...';
+            
+            const response = await fetch('/api/transcription/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    meetingSpaceId: meetingId,
+                    numberOfVideoStreams: 0,
+                    enableAudioStreams: true,
+                    accessToken: 'demo-token',
+                    cloudProjectNumber: 'your-project-id'
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.sessionId = result.sessionId;
+                this.startTime = new Date();
+                this.startDurationTimer();
+                this.showSessionInfo();
+                
+                startBtn.style.display = 'none';
+                stopBtn.disabled = false;
+                exportBtn.disabled = false;
+                
+                // Enable AI toggle
+                document.getElementById('aiToggle').disabled = false;
+                
+                this.addAIMessage('🚀 Transcription session started! AI features are now available.');
+            } else {
+                throw new Error(result.error || 'Failed to start transcription');
+            }
+        } catch (error) {
+            console.error('Error starting transcription:', error);
+            this.showError('Failed to start transcription: ' + error.message);
+            
+            const startBtn = document.getElementById('startBtn');
+            startBtn.disabled = false;
+            startBtn.textContent = '🚀 Start Transcription';
+        }
+    }
+
+    async stopTranscription() {
+        if (!this.sessionId) return;
+        
+        try {
+            const stopBtn = document.getElementById('stopBtn');
+            stopBtn.disabled = true;
+            stopBtn.textContent = '🔄 Stopping...';
+            
+            const response = await fetch(`/api/transcription/stop/${this.sessionId}`, {
+                method: 'POST'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                this.stopDurationTimer();
+                this.sessionId = null;
+                
+                const startBtn = document.getElementById('startBtn');
+                startBtn.style.display = 'block';
+                startBtn.disabled = false;
+                stopBtn.style.display = 'none';
+                
+                // Disable AI features
+                this.toggleAIBot(false);
+                document.getElementById('aiToggle').checked = false;
+                document.getElementById('aiToggle').disabled = true;
+                
+                this.hideSessionInfo();
+                this.addAIMessage('⏹️ Transcription session ended.');
+            }
+        } catch (error) {
+            console.error('Error stopping transcription:', error);
+            this.showError('Failed to stop transcription: ' + error.message);
+        }
+    }
+
+    async exportTranscript(format = 'txt') {
+        if (!this.sessionId) {
+            this.showError('No active session to export.');
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/transcription/export/${this.sessionId}/${format}`);
+            const result = await response.json();
+            
+            if (result.success) {
+                // Create download link
+                const link = document.createElement('a');
+                link.href = result.downloadUrl;
+                link.download = `meeting-transcript-${this.sessionId}.${format}`;
+                link.click();
+                
+                this.addAIMessage(`📄 Transcript exported as ${format.toUpperCase()} file.`);
+            }
+        } catch (error) {
+            console.error('Error exporting transcript:', error);
+            this.showError('Failed to export transcript.');
+        }
+    }
+
+    // UI helper methods
+    addTranscriptLine(transcript) {
+        const container = document.getElementById('transcriptContainer');
+        
+        // Remove placeholder if it exists
+        const placeholder = container.querySelector('.placeholder');
+        if (placeholder) {
+            placeholder.remove();
+        }
+        
+        const transcriptItem = document.createElement('div');
+        transcriptItem.className = `transcript-item ${transcript.isFinal ? 'final' : 'interim'}`;
+        
+        transcriptItem.innerHTML = `
+            <div class="transcript-header">
+                <span class="speaker-name">${transcript.speaker.name}</span>
+                <span class="timestamp">${new Date(transcript.timestamp).toLocaleTimeString()}</span>
+            </div>
+            <div class="transcript-text">${transcript.text}</div>
+        `;
+        
+        container.appendChild(transcriptItem);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    updateParticipants(participants) {
+        const container = document.getElementById('participantsList');
+        
+        // Clear existing participants
+        container.innerHTML = '';
+        
+        if (participants.length === 0) {
+            container.innerHTML = '<p class="placeholder">Waiting for participants...</p>';
+            return;
+        }
+        
+        participants.forEach(participant => {
+            const participantDiv = document.createElement('div');
+            participantDiv.className = 'participant-item';
             
             const initials = participant.name.split(' ').map(n => n[0]).join('').toUpperCase();
             
-            participantElement.innerHTML = `
+            participantDiv.innerHTML = `
                 <div class="participant-avatar">${initials}</div>
                 <div class="participant-info">
-                    <h4>${participant.name}</h4>
-                    <p>${participant.role.replace('_', ' ')}</p>
+                    <div class="participant-name">${participant.name}</div>
+                    <div class="participant-role">${participant.role}</div>
                 </div>
-                <div class="participant-status speaking">Speaking</div>
             `;
             
-            this.participantsList.appendChild(participantElement);
+            container.appendChild(participantDiv);
         });
+    }
+
+    updateConnectionStatus(status) {
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
         
-        this.participantCount.textContent = this.participants.size.toString();
+        statusIndicator.className = `status-indicator ${status}`;
+        
+        switch (status) {
+            case 'connected':
+                statusText.textContent = 'Connected';
+                break;
+            case 'connecting':
+                statusText.textContent = 'Connecting...';
+                break;
+            case 'disconnected':
+                statusText.textContent = 'Disconnected';
+                break;
+        }
     }
-    
-    updateTranscriptCount() {
-        const finalLines = this.transcriptLines.filter(line => line.isFinal).length;
-        this.transcriptCount.textContent = `${finalLines} lines`;
+
+    showSessionInfo() {
+        const sessionInfo = document.getElementById('sessionInfo');
+        const sessionIdSpan = document.getElementById('currentSessionId');
+        const startTimeSpan = document.getElementById('sessionStartTime');
+        
+        sessionInfo.style.display = 'flex';
+        sessionIdSpan.textContent = this.sessionId;
+        startTimeSpan.textContent = this.startTime.toLocaleString();
     }
-    
-    updateAudioQuality(quality) {
-        this.audioQuality.textContent = quality;
+
+    hideSessionInfo() {
+        document.getElementById('sessionInfo').style.display = 'none';
     }
-    
+
     startDurationTimer() {
-        this.durationTimer = setInterval(() => {
-            if (this.sessionStartTime) {
-                const elapsed = Date.now() - this.sessionStartTime.getTime();
-                const hours = Math.floor(elapsed / 3600000);
-                const minutes = Math.floor((elapsed % 3600000) / 60000);
-                const seconds = Math.floor((elapsed % 60000) / 1000);
-                
-                this.sessionDuration.textContent = 
-                    `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        this.durationInterval = setInterval(() => {
+            if (this.startTime) {
+                const duration = new Date() - this.startTime;
+                const minutes = Math.floor(duration / 60000);
+                const seconds = Math.floor((duration % 60000) / 1000);
+                document.getElementById('sessionDuration').textContent = 
+                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
             }
         }, 1000);
     }
-    
+
     stopDurationTimer() {
-        if (this.durationTimer) {
-            clearInterval(this.durationTimer);
-            this.durationTimer = null;
+        if (this.durationInterval) {
+            clearInterval(this.durationInterval);
+            this.durationInterval = null;
         }
     }
-    
-    clearTranscript() {
-        this.transcriptLines = [];
-        this.transcriptContainer.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-microphone-slash"></i>
-                <p>Waiting for audio streams...</p>
-            </div>
-        `;
-        this.updateTranscriptCount();
-        this.showToast('Transcript cleared', 'success');
-    }
-    
-    downloadTranscript() {
-        if (this.transcriptLines.length === 0) {
-            this.showToast('No transcript to download', 'warning');
-            return;
-        }
+
+    showError(message) {
+        const errorContainer = document.getElementById('errorContainer');
+        const errorMessage = document.getElementById('errorMessage');
         
-        const finalLines = this.transcriptLines.filter(line => line.isFinal);
-        const transcriptText = finalLines.map(line => {
-            const timestamp = new Date(line.timestamp).toLocaleTimeString();
-            return `[${timestamp}] ${line.speaker.name}: ${line.text}`;
-        }).join('\n');
+        errorMessage.textContent = message;
+        errorContainer.style.display = 'block';
         
-        const blob = new Blob([transcriptText], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `meeting-transcript-${new Date().toISOString().split('T')[0]}.txt`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        this.showToast('Transcript downloaded', 'success');
-    }
-    
-    showLoading(message) {
-        this.loadingMessage.textContent = message;
-        this.loadingOverlay.classList.remove('hidden');
-    }
-    
-    hideLoading() {
-        this.loadingOverlay.classList.add('hidden');
-    }
-    
-    showToast(message, type = 'info') {
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-        toast.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
-                ${message}
-            </div>
-        `;
-        
-        this.toastContainer.appendChild(toast);
-        
+        // Auto-hide after 5 seconds
         setTimeout(() => {
-            toast.remove();
+            this.dismissError();
         }, 5000);
+    }
+
+    dismissError() {
+        document.getElementById('errorContainer').style.display = 'none';
     }
 }
 
-// Initialize the app when DOM is loaded
+// Global functions for HTML onclick handlers
+function toggleAIBot(enabled) {
+    window.dashboard.toggleAIBot(enabled);
+}
+
+function askManualQuestion() {
+    window.dashboard.askManualQuestion();
+}
+
+function startTranscription() {
+    window.dashboard.startTranscription();
+}
+
+function stopTranscription() {
+    window.dashboard.stopTranscription();
+}
+
+function exportTranscript() {
+    window.dashboard.exportTranscript();
+}
+
+function dismissError() {
+    window.dashboard.dismissError();
+}
+
+// Initialize dashboard when page loads
 document.addEventListener('DOMContentLoaded', () => {
-    new MeetTranscriptionApp();
+    window.dashboard = new TranscriptionDashboard();
 });

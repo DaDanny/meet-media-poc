@@ -3,113 +3,109 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Meet Transcription POC</title>
+    <title>Meet Transcription Dashboard</title>
     <link rel="stylesheet" href="styles/main.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
-    <div class="app-container">
-        <header class="app-header">
-            <div class="header-content">
-                <h1 class="app-title">
-                    <i class="fas fa-microphone"></i>
-                    Meet Transcription POC
-                </h1>
-                <div class="connection-status">
-                    <span id="connection-indicator" class="status-indicator disconnected">
-                        <i class="fas fa-circle"></i>
-                        Disconnected
-                    </span>
-                </div>
+    <div class="container">
+        <header class="header">
+            <h1>🎤 Meet Transcription Dashboard</h1>
+            <div class="connection-status" id="connectionStatus">
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span id="statusText">Connecting...</span>
             </div>
         </header>
 
         <main class="main-content">
-            <div class="panel connection-panel">
-                <h2 class="panel-title">
-                    <i class="fas fa-link"></i>
-                    Connect to Meeting
-                </h2>
-                <form id="connection-form" class="connection-form">
-                    <div class="form-group">
-                        <label for="meeting-id">Meeting Space ID</label>
-                        <input type="text" id="meeting-id" placeholder="spaces/abc123def456" required>
-                    </div>
-                    <div class="form-actions">
-                        <button type="button" id="auth-btn" class="btn btn-secondary">
-                            <i class="fab fa-google"></i>
-                            Authenticate with Google
-                        </button>
-                        <button type="submit" id="connect-btn" class="btn btn-primary" disabled>
-                            <i class="fas fa-plug"></i>
-                            Connect to Meeting
-                        </button>
-                    </div>
-                </form>
-            </div>
+            <!-- Control Panel -->
+            <div class="control-panel">
+                <div class="session-controls">
+                    <button id="startBtn" class="btn btn-primary" onclick="startTranscription()">
+                        🚀 Start Transcription
+                    </button>
+                    <button id="stopBtn" class="btn btn-secondary" onclick="stopTranscription()" disabled>
+                        ⏹️ Stop Transcription
+                    </button>
+                    <button id="exportBtn" class="btn btn-accent" onclick="exportTranscript()" disabled>
+                        📄 Export Transcript
+                    </button>
+                </div>
 
-            <div class="panel participants-panel">
-                <h2 class="panel-title">
-                    <i class="fas fa-users"></i>
-                    Participants (<span id="participant-count">0</span>)
-                </h2>
-                <div id="participants-list" class="participants-list">
-                    <div class="empty-state">
-                        <i class="fas fa-user-slash"></i>
-                        <p>No participants connected</p>
+                <!-- 🔧 NEW: AI Bot Controls -->
+                <div class="ai-controls">
+                    <h3>🤖 AI Assistant</h3>
+                    <div class="toggle-group">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="aiToggle" onchange="toggleAIBot(this.checked)">
+                            <span class="slider"></span>
+                        </label>
+                        <span>Enable AI Bot</span>
+                        <span class="ai-status" id="aiStatus">Disabled</span>
+                    </div>
+                    
+                    <div class="voice-commands" id="voiceCommands" style="display: none;">
+                        <h4>Voice Commands:</h4>
+                        <ul>
+                            <li><strong>"Hey AI"</strong> or <strong>"AI Bot"</strong> - Ask a question</li>
+                            <li><strong>"AI summary"</strong> - Get meeting summary</li>
+                            <li><strong>"AI action items"</strong> - List action items</li>
+                        </ul>
+                        <div class="command-detected" id="commandDetected" style="display: none;">
+                            🎯 Voice command detected! AI is responding...
+                        </div>
+                    </div>
+
+                    <div class="manual-question" id="manualQuestion" style="display: none;">
+                        <input type="text" id="questionInput" placeholder="Ask the AI a question..." 
+                               onkeypress="if(event.key==='Enter') askManualQuestion()">
+                        <button onclick="askManualQuestion()">Ask</button>
                     </div>
                 </div>
             </div>
 
-            <div class="panel transcript-panel">
-                <h2 class="panel-title">
-                    <i class="fas fa-closed-captioning"></i>
-                    Live Transcript
-                    <div class="transcript-controls">
-                        <button id="clear-transcript" class="btn btn-small">
-                            <i class="fas fa-eraser"></i>
-                            Clear
-                        </button>
-                        <button id="download-transcript" class="btn btn-small">
-                            <i class="fas fa-download"></i>
-                            Download
-                        </button>
-                    </div>
-                </h2>
-                <div id="transcript-container" class="transcript-container">
-                    <div class="empty-state">
-                        <i class="fas fa-microphone-slash"></i>
-                        <p>Waiting for audio streams...</p>
+            <!-- Main Dashboard -->
+            <div class="dashboard">
+                <!-- Participants Panel -->
+                <div class="panel participants-panel">
+                    <h3>👥 Participants</h3>
+                    <div id="participantsList" class="participants-list">
+                        <p class="placeholder">Waiting for participants...</p>
                     </div>
                 </div>
+
+                <!-- Live Transcript Panel -->
+                <div class="panel transcript-panel">
+                    <h3>📝 Live Transcript</h3>
+                    <div id="transcriptContainer" class="transcript-container">
+                        <p class="placeholder">Transcript will appear here when transcription starts...</p>
+                    </div>
+                </div>
+
+                <!-- 🔧 NEW: AI Responses Panel -->
+                <div class="panel ai-panel" id="aiPanel" style="display: none;">
+                    <h3>🤖 AI Assistant</h3>
+                    <div id="aiResponses" class="ai-responses">
+                        <p class="placeholder">AI responses will appear here...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Session Info -->
+            <div class="session-info" id="sessionInfo" style="display: none;">
+                <p><strong>Session ID:</strong> <span id="currentSessionId">-</span></p>
+                <p><strong>Started:</strong> <span id="sessionStartTime">-</span></p>
+                <p><strong>Duration:</strong> <span id="sessionDuration">00:00</span></p>
             </div>
         </main>
 
-        <footer class="status-bar">
-            <div class="status-item">
-                <i class="fas fa-clock"></i>
-                <span id="session-duration">00:00:00</span>
+        <!-- Error Display -->
+        <div id="errorContainer" class="error-container" style="display: none;">
+            <div class="error-message">
+                <span id="errorMessage"></span>
+                <button onclick="dismissError()" class="error-close">&times;</button>
             </div>
-            <div class="status-item">
-                <i class="fas fa-comment-dots"></i>
-                <span id="transcript-count">0 lines</span>
-            </div>
-            <div class="status-item">
-                <i class="fas fa-signal"></i>
-                <span id="audio-quality">No audio</span>
-            </div>
-        </footer>
-    </div>
-
-    <div id="loading-overlay" class="loading-overlay hidden">
-        <div class="loading-content">
-            <div class="loading-spinner"></div>
-            <p id="loading-message">Connecting to meeting...</p>
         </div>
     </div>
-
-    <div id="toast-container" class="toast-container"></div>
 
     <script src="scripts/app.js"></script>
 </body>

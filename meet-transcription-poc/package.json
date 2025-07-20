@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only backend/server.ts",
-    "build": "npm run build:server && npm run build:web",
+    "build": "npm run build:server",
     "build:server": "tsc",
     "build:web": "webpack --mode production",
     "build:dev": "tsc && webpack --mode development",
@@ -22,30 +22,35 @@
   "author": "Your Name",
   "license": "Apache-2.0",
   "dependencies": {
+    "@google-cloud/firestore": "^7.11.3",
     "@google-cloud/speech": "^6.6.0",
-    "express": "^4.19.2",
-    "ws": "^8.18.0",
+    "@types/jsonwebtoken": "^9.0.10",
     "cors": "^2.8.5",
-    "helmet": "^7.1.0",
     "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "firebase-admin": "^13.4.0",
+    "google-auth-library": "^10.1.0",
+    "googleapis": "^142.0.0",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
     "uuid": "^10.0.0",
-    "googleapis": "^142.0.0"
+    "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@types/node": "^20.14.10",
-    "@types/express": "^4.17.21",
-    "@types/ws": "^8.5.10",
     "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.14.10",
     "@types/uuid": "^10.0.0",
-    "typescript": "^5.5.4",
+    "@types/ws": "^8.5.10",
+    "html-webpack-plugin": "^5.6.0",
+    "jest": "^29.7.0",
+    "ts-loader": "^9.5.1",
     "ts-node-dev": "^2.0.0",
+    "typescript": "^5.5.4",
     "webpack": "^5.93.0",
     "webpack-cli": "^5.1.4",
-    "ts-loader": "^9.5.1",
-    "html-webpack-plugin": "^5.6.0",
-    "webpack-dev-server": "^4.15.2",
-    "jest": "^29.7.0",
-    "@types/jest": "^29.5.12"
+    "webpack-dev-server": "^4.15.2"
   },
   "engines": {
     "node": ">=18.0.0"

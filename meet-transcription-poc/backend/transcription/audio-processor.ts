@@ -44,7 +44,8 @@ export class AudioTranscriptionProcessor extends EventEmitter {
    */
   async processAudioTrack(
     meetStreamTrack: MeetStreamTrack, 
-    participantInfo: SpeakerInfo
+    participantInfo: SpeakerInfo,
+    meetingId: string = 'unknown'
   ): Promise<void> {
     const { mediaStreamTrack } = meetStreamTrack;
     
@@ -60,14 +61,15 @@ export class AudioTranscriptionProcessor extends EventEmitter {
 
     try {
       // Create a speech recognition stream for this participant
-      const recognizeStream = this.createRecognitionStream(participantId);
+      const recognizeStream = this.createRecognitionStream(participantId, meetingId);
       this.activeStreams.set(participantId, recognizeStream);
 
       // Process the audio track using MediaStreamTrackProcessor
       await this.processMediaStreamTrack(
         mediaStreamTrack as MediaStreamAudioTrack,
         recognizeStream,
-        participantInfo
+        participantInfo,
+        meetingId
       );
 
     } catch (error) {
@@ -82,7 +84,7 @@ export class AudioTranscriptionProcessor extends EventEmitter {
   /**
    * Create a Google Speech-to-Text recognition stream
    */
-  private createRecognitionStream(participantId: string) {
+  private createRecognitionStream(participantId: string, meetingId: string) {
     const request = {
       config: {
         encoding: this.speechConfig.encoding as any,
@@ -115,7 +117,7 @@ export class AudioTranscriptionProcessor extends EventEmitter {
             isFinal: result.isFinal || false,
             speakerTag: result.speakerTag,
             languageCode: this.speechConfig.languageCode
-          }, participantId);
+          }, participantId, meetingId);
         }
       }
     });
@@ -137,7 +139,8 @@ export class AudioTranscriptionProcessor extends EventEmitter {
   private async processMediaStreamTrack(
     track: MediaStreamAudioTrack,
     recognizeStream: any,
-    participantInfo: SpeakerInfo
+    participantInfo: SpeakerInfo,
+    meetingId: string
   ): Promise<void> {
     try {
       // Use MediaStreamTrackProcessor for real-time audio processing
@@ -192,11 +195,12 @@ export class AudioTranscriptionProcessor extends EventEmitter {
   }
 
   /**
-   * Handle transcription results and emit events
+   * Handle transcription results from the Speech-to-Text API
    */
   private handleTranscriptionResult(
     result: TranscriptionResult,
-    participantId: string
+    participantId: string,
+    meetingId: string
   ): void {
     const speaker = this.speakers.get(participantId);
     if (!speaker) {
@@ -211,14 +215,12 @@ export class AudioTranscriptionProcessor extends EventEmitter {
       timestamp: new Date(),
       isFinal: result.isFinal,
       confidence: result.confidence,
-      speakerTag: result.speakerTag
+      speakerTag: result.speakerTag,
+      meetingId
     };
 
     // Emit the transcript event
     this.emit('transcript', transcriptLine);
-
-    // Log for debugging
-    console.log(`[${speaker.name}] ${result.isFinal ? 'FINAL' : 'INTERIM'}: ${result.transcript}`);
   }
 
   /**
