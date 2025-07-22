@@ -15,6 +15,8 @@ export interface MeetStreamTrack {
   mediaStreamTrack: MediaStreamTrack;
   id?: string;
   participantId?: string;
+  receiver?: RTCRtpReceiver;
+  kind?: 'audio' | 'video';
 }
 
 export interface MeetMediaApiClientConfig {

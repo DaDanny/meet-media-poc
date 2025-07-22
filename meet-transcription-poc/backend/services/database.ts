@@ -7,30 +7,62 @@ let db: Firestore;
 
 export function initializeDatabase() {
   try {
-    // Initialize Firebase Admin SDK
-    // In production, you'd use a service account key file
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID || process.env.GCLOUD_PROJECT || 'your-project-id';
+    
+    // Method 1: Try service account credentials (if available)
     const serviceAccount: ServiceAccount = {
-      projectId: process.env.GOOGLE_CLOUD_PROJECT_ID || 'your-project-id',
+      projectId,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',
       privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n') || '',
     };
 
-    if (!serviceAccount.projectId || !serviceAccount.clientEmail || !serviceAccount.privateKey) {
-      console.warn('⚠️  Firebase credentials not found. Using Firestore emulator or default credentials.');
-      // For development, you can use the emulator or default credentials
-      initializeApp();
-    } else {
+    if (serviceAccount.clientEmail && serviceAccount.privateKey && projectId !== 'your-project-id') {
+      console.log('🔑 Using service account credentials for Firebase');
       initializeApp({
         credential: cert(serviceAccount),
         projectId: serviceAccount.projectId,
       });
+    } 
+    // Method 2: Use Application Default Credentials (ADC) - Recommended for production
+    else if (projectId && projectId !== 'your-project-id') {
+      console.log('🔑 Using Application Default Credentials (ADC) for Firebase');
+      console.log(`📍 Project ID: ${projectId}`);
+      initializeApp({
+        projectId: projectId,
+        // No credential specified - will use ADC
+      });
+    }
+    // Method 3: Fallback for development
+    else {
+      console.warn('⚠️  No Firebase credentials configured. Using default initialization.');
+      console.warn('   This will work with Firebase emulator or if running on Google Cloud with default credentials.');
+      initializeApp();
     }
 
     db = getFirestore();
     console.log('✅ Firestore database initialized successfully');
+    
+    // Test database connection
+    testDatabaseConnection();
+    
   } catch (error) {
     console.error('❌ Failed to initialize Firestore:', error);
+    console.error('💡 Check your authentication setup. See setup guide for alternatives to service account keys.');
     throw error;
+  }
+}
+
+// Test database connection
+async function testDatabaseConnection() {
+  try {
+    // Try to read from a test collection to verify connection
+    await db.collection('_health_check').limit(1).get();
+    console.log('✅ Database connection test successful');
+  } catch (error) {
+    console.error('❌ Database connection test failed:', error);
+    if (error instanceof Error && error.message.includes('permission')) {
+      console.log('💡 This might be a permissions issue. Make sure your authentication method has Firestore access.');
+    }
   }
 }
 
